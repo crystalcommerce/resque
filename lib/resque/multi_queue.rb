@@ -19,9 +19,7 @@ module Resque
       @redis      = redis
 
       queues.each do |queue|
-        key = @redis.is_a?(Redis::Namespace) ? "#{@redis.namespace}:" : ""
-        key += queue.redis_name
-        @queue_hash[key] = queue
+        store_queue(queue)
       end
     end
 
@@ -49,7 +47,7 @@ module Resque
         synchronize do
           value = @redis.blpop(*(queue_names + [1])) until value
           queue_name, payload = value
-          queue = @queue_hash[queue_name]
+          queue = lookup_queue(queue_name)
           [queue, queue.decode(payload)]
         end
       end
@@ -65,9 +63,24 @@ module Resque
       return unless payload
 
       synchronize do
-        queue = @queue_hash[queue_name]
+        queue = lookup_queue(queue_name)
         [queue, queue.decode(payload)]
       end
+    end
+
+  private
+
+    def lookup_queue(name)
+      @queue_hash[prefix_queue_name(name)]
+    end
+
+    def store_queue(queue)
+      @queue_hash[prefix_queue_name(queue.redis_name)] = queue
+    end
+
+    def prefix_queue_name(name)
+      prefix = @redis.is_a?(Redis::Namespace) ? "#{@redis.namespace}:" : ""
+      prefix + name
     end
   end
 end
